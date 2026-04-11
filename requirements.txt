@@ -4,7 +4,7 @@ opencv-contrib-python==4.8.1.78
 
 # YOLO Models
 ultralytics==8.1.0  # YOLOv8
-torch==2.1.2
+torch
 torchvision==0.16.2
 
 # Data Processing
