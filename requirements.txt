@@ -54,3 +54,4 @@ xlsxwriter
 python-dotenv
 
 tqdm
+python-multipart
