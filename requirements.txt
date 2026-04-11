@@ -37,7 +37,7 @@
 fastapi
 uvicorn
 
-# YOLO + CV
+# Core CV + YOLO
 opencv-python
 ultralytics
 torch
@@ -46,9 +46,11 @@ torch
 numpy
 pandas
 
-# Excel
+# Excel export
 openpyxl
 xlsxwriter
 
-# Utils
+# Utilities
 python-dotenv
+
+tqdm
