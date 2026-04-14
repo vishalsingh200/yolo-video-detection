@@ -83,23 +83,16 @@ async def root():
 
 @app.get("/api/classes")
 async def get_available_classes():
-    """Get list of available object classes"""
-    try:
-        # ⚠️ Avoid heavy YOLO loading on Render
-        classes = [
-            "person", "bicycle", "car", "motorcycle", "bus",
-            "truck", "traffic light", "fire hydrant", "stop sign",
-            "parking meter", "bench", "bird", "cat", "dog"
-        ]
+    return {
+        "classes": [
+            "person", "bicycle", "car", "motorcycle",
+            "bus", "truck", "traffic light",
+            "fire hydrant", "stop sign", "parking meter",
+            "bench", "bird", "cat", "dog"
+        ],
+        "count": 14
+    }
 
-        return {
-            "classes": classes,
-            "count": len(classes)
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting classes: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/models")
 async def get_available_models():
