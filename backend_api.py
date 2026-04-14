@@ -35,9 +35,9 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
+    CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
+        "https://dynamic-maamoul-2d88dc.netlify.app",
         "https://thunderous-lamington-8050fb.netlify.app"
     ],
     allow_credentials=True,
