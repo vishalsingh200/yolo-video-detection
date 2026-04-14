@@ -1,7 +1,7 @@
 """
 FastAPI Backend for YOLO Video Detection Frontend
 """
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -13,6 +13,7 @@ import json
 import shutil
 from pathlib import Path
 import logging
+import threading
 
 # Add parent directory to path to import YOLO modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -48,6 +49,21 @@ JOBS_DIR.mkdir(exist_ok=True)
 # In-memory job storage
 jobs_db = {}
 
+global_detector = None
+
+def get_detector(model, confidence, device):
+    global global_detector
+
+    if global_detector is None:
+        logger.info("Loading YOLO model globally...")
+        global_detector = YOLODetector(
+            model_name=f"{model}.pt",
+            confidence_threshold=confidence,
+            device=device
+        )
+
+    return global_detector
+
 # Pydantic models
 class DetectionRequest(BaseModel):
     model: str = "yolov8n"
@@ -69,7 +85,7 @@ async def root():
     """Health check"""
     return {"status": "healthy", "message": "YOLO Video Detection API"}
 
-# @app.get("/api/classes")
+@app.get("/api/classes")
 # async def get_available_classes():
 #     """Get list of available object classes"""
 #     try:
@@ -80,8 +96,6 @@ async def root():
 #         logger.error(f"Error getting classes: {str(e)}")
 #         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.get("/api/classes")
 async def get_available_classes():
     return {
         "classes": [
@@ -92,6 +106,7 @@ async def get_available_classes():
         ],
         "count": 14
     }
+
 
 
 @app.get("/api/models")
@@ -138,7 +153,7 @@ async def get_available_models():
 
 @app.post("/api/detect")
 async def detect_objects(
-    background_tasks: BackgroundTasks,
+    # background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     classes: str = Form(...),
     model: str = Form("yolov8n"),
@@ -187,19 +202,35 @@ async def detect_objects(
         }
         
         # Start background processing
-        background_tasks.add_task(
-            process_video_background,
-            job_id,
-            str(video_path),
-            target_classes,
-            model,
-            confidence,
-            device,
-            skipFrames,
-            maxFrames if maxFrames > 0 else None,
-            saveVideo,
-            job_dir
-        )
+        # background_tasks.add_task(
+        #     process_video_background,
+        #     job_id,
+        #     str(video_path),
+        #     target_classes,
+        #     model,
+        #     confidence,
+        #     device,
+        #     skipFrames,
+        #     maxFrames if maxFrames > 0 else None,
+        #     saveVideo,
+        #     job_dir
+        # )
+
+        threading.Thread(
+            target=process_video_background,
+            args=(
+                job_id,
+                str(video_path),
+                target_classes,
+                model,
+                confidence,
+                device,
+                skipFrames,
+                maxFrames if maxFrames > 0 else None,
+                saveVideo,
+                job_dir
+            )
+        ).start()
         
         return {
             "job_id": job_id,
@@ -225,6 +256,14 @@ def process_video_background(
 ):
     """Background task to process video"""
     try:
+
+
+        # ✅ ADD HERE (VERY IMPORTANT)
+        if max_frames is None or max_frames > 300:
+            max_frames = 300
+
+
+            
         # Update status
         jobs_db[job_id]["status"] = "processing"
         jobs_db[job_id]["progress"] = 5
@@ -233,11 +272,14 @@ def process_video_background(
         logger.info(f"Job {job_id}: Initializing detector with model {model}")
         
         # Initialize detector
-        detector = YOLODetector(
-            model_name=f"{model}.pt",
-            confidence_threshold=confidence,
-            device=device
-        )
+        # detector = YOLODetector(
+        #     model_name=f"{model}.pt",
+        #     confidence_threshold=confidence,
+        #     device=device
+        # )
+
+
+        detector = get_detector(model, confidence, device)
         
         jobs_db[job_id]["progress"] = 10
         jobs_db[job_id]["message"] = "Loading video..."

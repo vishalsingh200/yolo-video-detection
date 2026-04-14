@@ -2,7 +2,7 @@ import axios from 'axios';
 import { saveAs } from 'file-saver';
 
 const API_BASE_URL = 'https://yolo-video-detection.onrender.com/api';
-
+  
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {

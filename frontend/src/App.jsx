@@ -60,7 +60,7 @@ function App() {
         } catch (err) {
           console.error('Error polling status:', err);
         }
-      }, 1000); // Poll every second
+      }, 3000); // Poll every second
 
       return () => clearInterval(interval);
     }
