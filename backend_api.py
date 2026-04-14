@@ -39,7 +39,7 @@ app.add_middleware(
         "https://dynamic-maamoul-2d88dc.netlify.app",
         "https://thunderous-lamington-8050fb.netlify.app"
     ],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
