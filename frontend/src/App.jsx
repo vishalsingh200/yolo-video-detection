@@ -116,7 +116,7 @@ function App() {
         setError('Lost connection to server');
         setIsProcessing(false);
       }
-    }, 1500);
+    }, 2500);
   };
 
   const handleStartDetection = async () => {

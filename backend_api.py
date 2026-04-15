@@ -63,6 +63,11 @@ jobs_db = {}
 _executor = ThreadPoolExecutor(max_workers=2)
 
 
+# ✅ 2. ADD PREFLIGHT HANDLER HERE
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(request: Request):
+    return {}
+
 @app.get("/")
 async def root():
     return {"status": "healthy", "message": "YOLO Video Detection API"}
