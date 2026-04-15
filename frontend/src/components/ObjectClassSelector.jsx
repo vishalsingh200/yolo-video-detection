@@ -7,7 +7,7 @@ const POPULAR_CLASSES = [
   'dog', 'cat', 'bird', 'cell phone', 'laptop', 'bottle'
 ];
 
-const ObjectClassSelector = ({ availableClasses, selectedClasses, onClassesChange }) => {
+const ObjectClassSelector = ({ availableClasses = [], selectedClasses = [], onClassesChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAll, setShowAll] = useState(false);
 
@@ -97,7 +97,7 @@ const ObjectClassSelector = ({ availableClasses, selectedClasses, onClassesChang
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          All Classes ({availableClasses.length})
+          All Classes ({availableClasses?.length ?? 0})
         </button>
       </div>
 

@@ -53,7 +53,9 @@ function App() {
   // Load real classes from backend on mount
   useEffect(() => {
     getAvailableClasses()
-      .then(setAvailableClasses)
+      .then((res) => {
+      setAvailableClasses(res); // ✅ FIX
+      })
       .catch(() => setAvailableClasses(FALLBACK_CLASSES));
   }, []);
 
