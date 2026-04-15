@@ -1,24 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { Video, Sparkles, Check, Loader, AlertCircle } from 'lucide-react';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Video, Sparkles, Check, Loader } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import VideoUpload from './components/VideoUpload';
 import ObjectClassSelector from './components/ObjectClassSelector';
 import DetectionConfig from './components/DetectionConfig';
 import ResultsDisplay from './components/ResultsDisplay';
-import { 
-  uploadAndDetect, 
-  getDetectionStatus, 
-  downloadExcel, 
+import {
+  uploadAndDetect,
+  getDetectionStatus,
+  downloadExcel,
+  downloadCSV,
   downloadVideo,
-  getAvailableClasses 
+  getAvailableClasses,
 } from './utils/api';
 import './index.css';
+
+const FALLBACK_CLASSES = [
+  'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
+  'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
+  'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack',
+  'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+  'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+  'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
+  'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
+  'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
+  'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+  'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+];
 
 function App() {
   const [step, setStep] = useState(1);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedClasses, setSelectedClasses] = useState(['person', 'car']);
-  const [availableClasses, setAvailableClasses] = useState([]);
+  const [availableClasses, setAvailableClasses] = useState(FALLBACK_CLASSES);
   const [config, setConfig] = useState({
     model: 'yolov8n',
     confidence: 0.25,
@@ -28,58 +43,26 @@ function App() {
     saveVideo: true,
   });
   const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [processingProgress, setProcessingProgress] = useState(0);
-  const [jobId, setJobId] = useState(null);
+  const [processingMessage, setProcessingMessage] = useState('');
   const [results, setResults] = useState(null);
+  const [currentJobId, setCurrentJobId] = useState(null);
   const [error, setError] = useState(null);
+  const pollRef = useRef(null);
 
-  // Load available classes on mount
+  // Load real classes from backend on mount
   useEffect(() => {
-    loadAvailableClasses();
+    getAvailableClasses()
+      .then(setAvailableClasses)
+      .catch(() => setAvailableClasses(FALLBACK_CLASSES));
   }, []);
 
-  // Poll job status when processing
+  // Cleanup polling on unmount
   useEffect(() => {
-    if (isProcessing && jobId) {
-      const interval = setInterval(async () => {
-        try {
-          const status = await getDetectionStatus(jobId);
-          setProcessingProgress(status.progress);
-          
-          if (status.status === 'completed') {
-            setResults(status.results);
-            setIsProcessing(false);
-            setStep(4);
-            clearInterval(interval);
-          } else if (status.status === 'failed') {
-            setError(status.message || 'Processing failed');
-            setIsProcessing(false);
-            clearInterval(interval);
-          }
-        } catch (err) {
-          console.error('Error polling status:', err);
-        }
-      }, 3000); // Poll every second
-
-      return () => clearInterval(interval);
-    }
-  }, [isProcessing, jobId]);
-
-  const loadAvailableClasses = async () => {
-    try {
-      const classes = await getAvailableClasses();
-      setAvailableClasses(classes);
-    } catch (err) {
-      console.error('Error loading classes:', err);
-      // Fallback to default classes
-      setAvailableClasses([
-        'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
-        'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear',
-        'chair', 'couch', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'cell phone'
-      ]);
-    }
-  };
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const handleVideoSelected = (file) => {
     setSelectedVideo(file);
@@ -92,79 +75,128 @@ function App() {
     setStep(1);
   };
 
+  const pollJobStatus = (jobId) => {
+    let pollCount = 0;
+    const MAX_POLLS = 400; // ~10 min at 1.5s intervals
+
+    pollRef.current = setInterval(async () => {
+      try {
+        pollCount++;
+        if (pollCount > MAX_POLLS) {
+          clearInterval(pollRef.current);
+          setError('Processing timed out. Please try a shorter video.');
+          setIsProcessing(false);
+          return;
+        }
+
+        const status = await getDetectionStatus(jobId);
+
+        // Log every response so you can see what the backend actually returns
+        console.log('[Poll #' + pollCount + ']', status);
+
+        setProcessingProgress(status.progress || 0);
+        setProcessingMessage(status.message || '');
+
+        if (status.status === 'completed') {
+          clearInterval(pollRef.current);
+          setResults(status.results);
+          setIsProcessing(false);
+          setStep(4);
+        } else if (status.status === 'failed') {
+          clearInterval(pollRef.current);
+          setError(status.message || 'Processing failed on server');
+          setIsProcessing(false);
+        }
+        // 'queued' or 'processing' → keep polling normally
+      } catch (err) {
+        console.error('[Poll] error:', err);
+        clearInterval(pollRef.current);
+        setError('Lost connection to server');
+        setIsProcessing(false);
+      }
+    }, 1500);
+  };
+
   const handleStartDetection = async () => {
     if (!selectedVideo || selectedClasses.length === 0) {
-      setError('Please select a video and at least one object class');
+      alert('Please select a video and at least one object class');
       return;
     }
 
-    try {
-      setError(null);
-      setIsProcessing(true);
-      setUploadProgress(0);
-      setProcessingProgress(0);
+    setIsProcessing(true);
+    setProcessingProgress(0);
+    setProcessingMessage('Uploading video...');
+    setError(null);
 
-      // Upload video and start detection
-      const response = await uploadAndDetect(
+    try {
+      const jobData = await uploadAndDetect(
         selectedVideo,
         selectedClasses,
         config,
-        (progress) => {
-          setUploadProgress(progress);
+        (uploadPercent) => {
+          // Show upload progress up to 10%
+          setProcessingProgress(Math.round(uploadPercent * 0.1));
+          setProcessingMessage(`Uploading: ${uploadPercent}%`);
         }
       );
 
-      // Store job ID
-      setJobId(response.job_id);
+      setCurrentJobId(jobData.job_id);
+      setProcessingMessage('Processing started...');
 
-      // Status polling will continue in useEffect
-      
+      // Start polling for status
+      pollJobStatus(jobData.job_id);
+
     } catch (err) {
-      console.error('Detection error:', err);
-      setError(err.message || 'Failed to start detection');
+      setError(typeof err === 'string' ? err : 'Failed to start detection. Is the backend running?');
       setIsProcessing(false);
     }
   };
 
   const handleDownloadExcel = async () => {
+    if (!currentJobId) return;
     try {
-      await downloadExcel(jobId);
+      await downloadExcel(currentJobId);
     } catch (err) {
-      console.error('Download error:', err);
-      setError('Failed to download Excel file');
+      alert('Failed to download Excel file');
+    }
+  };
+
+  const handleDownloadCSV = async () => {
+    if (!currentJobId) return;
+    try {
+      await downloadCSV(currentJobId);
+    } catch (err) {
+      alert('Failed to download CSV file');
     }
   };
 
   const handleDownloadVideo = async () => {
+    if (!currentJobId) return;
     try {
-      await downloadVideo(jobId);
+      await downloadVideo(currentJobId);
     } catch (err) {
-      console.error('Download error:', err);
-      setError('Failed to download video file');
+      alert('Failed to download video file');
     }
   };
 
   const handleReset = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
     setStep(1);
     setSelectedVideo(null);
     setResults(null);
     setIsProcessing(false);
-    setUploadProgress(0);
     setProcessingProgress(0);
-    setJobId(null);
+    setProcessingMessage('');
+    setCurrentJobId(null);
     setError(null);
   };
 
   const canProceed = () => {
     switch (step) {
-      case 1:
-        return selectedVideo !== null;
-      case 2:
-        return selectedClasses.length > 0;
-      case 3:
-        return true;
-      default:
-        return false;
+      case 1: return selectedVideo !== null;
+      case 2: return selectedClasses.length > 0;
+      case 3: return true;
+      default: return false;
     }
   };
 
@@ -185,11 +217,8 @@ function App() {
                 <p className="text-sm text-gray-600">AI-Powered Video Analysis</p>
               </div>
             </div>
-            {results && (
-              <button
-                onClick={handleReset}
-                className="btn-secondary"
-              >
+            {(results || error) && (
+              <button onClick={handleReset} className="btn-secondary">
                 New Detection
               </button>
             )}
@@ -199,25 +228,12 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Message */}
+
+        {/* Error Banner */}
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg flex items-start gap-3"
-          >
-            <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
-            <div>
-              <p className="font-semibold text-red-900">Error</p>
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-            <button
-              onClick={() => setError(null)}
-              className="ml-auto text-red-500 hover:text-red-700"
-            >
-              <X size={20} />
-            </button>
-          </motion.div>
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            ⚠️ {error}
+          </div>
         )}
 
         {!results && !isProcessing && (
@@ -244,12 +260,7 @@ function App() {
             {/* Step Content */}
             <AnimatePresence mode="wait">
               {step === 1 && (
-                <motion.div
-                  key="step1"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                >
+                <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
                   <VideoUpload
                     selectedVideo={selectedVideo}
                     onVideoSelected={handleVideoSelected}
@@ -257,14 +268,8 @@ function App() {
                   />
                 </motion.div>
               )}
-
               {step === 2 && (
-                <motion.div
-                  key="step2"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                >
+                <motion.div key="step2" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
                   <ObjectClassSelector
                     availableClasses={availableClasses}
                     selectedClasses={selectedClasses}
@@ -272,14 +277,8 @@ function App() {
                   />
                 </motion.div>
               )}
-
               {step === 3 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                >
+                <motion.div key="step3" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
                   <DetectionConfig config={config} onChange={setConfig} />
                 </motion.div>
               )}
@@ -306,8 +305,7 @@ function App() {
               ) : (
                 <button
                   onClick={handleStartDetection}
-                  disabled={!canProceed()}
-                  className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary flex items-center gap-2"
                 >
                   <Sparkles size={18} />
                   Start Detection
@@ -319,10 +317,7 @@ function App() {
 
         {/* Processing State */}
         {isProcessing && (
-          <ProcessingIndicator 
-            uploadProgress={uploadProgress}
-            processingProgress={processingProgress}
-          />
+          <ProcessingIndicator progress={processingProgress} message={processingMessage} />
         )}
 
         {/* Results */}
@@ -330,6 +325,7 @@ function App() {
           <ResultsDisplay
             results={results}
             onDownloadExcel={handleDownloadExcel}
+            onDownloadCSV={handleDownloadCSV}
             onDownloadVideo={handleDownloadVideo}
           />
         )}
@@ -339,7 +335,6 @@ function App() {
       <footer className="mt-16 py-8 border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-600">
           <p>Built with YOLO v8 • Powered by AI</p>
-          <p>By Vishal Kumar Singh</p>
         </div>
       </footer>
     </div>
@@ -368,47 +363,37 @@ const StepIndicator = ({ number, active, completed, label }) => (
   </div>
 );
 
-const ProcessingIndicator = ({ uploadProgress, processingProgress }) => {
-  const totalProgress = uploadProgress < 100 ? uploadProgress : processingProgress;
-  const stage = uploadProgress < 100 ? 'Uploading video...' : 'Processing video...';
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="card p-12 text-center pulse-glow"
-    >
-      <div className="mb-6">
-        <Loader className="w-16 h-16 mx-auto text-primary-600 spinner" />
-      </div>
-      <h2 className="text-2xl font-bold mb-2">{stage}</h2>
-      <p className="text-gray-600 mb-6">
-        {uploadProgress < 100 
-          ? 'Please wait while we upload your video...'
-          : 'Detecting objects frame by frame...'
-        }
-      </p>
-      
-      <div className="max-w-md mx-auto">
-        <div className="h-3 bg-gray-200 rounded-full overflow-hidden mb-2">
-          <motion.div
-            className="h-full bg-gradient-to-r from-primary-500 to-secondary-500"
-            initial={{ width: 0 }}
-            animate={{ width: `${totalProgress}%` }}
-            transition={{ duration: 0.3 }}
-          />
-        </div>
-        <p className="text-sm text-gray-600">{totalProgress}% Complete</p>
-      </div>
+const ProcessingIndicator = ({ progress, message }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    className="card p-12 text-center pulse-glow"
+  >
+    <div className="mb-6">
+      <Loader className="w-16 h-16 mx-auto text-primary-600 spinner" />
+    </div>
+    <h2 className="text-2xl font-bold mb-2">Processing Video...</h2>
+    <p className="text-gray-600 mb-6">{message || 'Detecting objects frame by frame'}</p>
 
-      <div className="mt-8 grid grid-cols-3 gap-4 max-w-lg mx-auto">
-        <ProcessingStep label="Uploading" completed={uploadProgress >= 100} />
-        <ProcessingStep label="Detecting" completed={processingProgress > 50} />
-        <ProcessingStep label="Exporting" completed={processingProgress >= 90} />
+    <div className="max-w-md mx-auto">
+      <div className="h-3 bg-gray-200 rounded-full overflow-hidden mb-2">
+        <motion.div
+          className="h-full bg-gradient-to-r from-primary-500 to-secondary-500"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.3 }}
+        />
       </div>
-    </motion.div>
-  );
-};
+      <p className="text-sm text-gray-600">{progress}% Complete</p>
+    </div>
+
+    <div className="mt-8 grid grid-cols-3 gap-4 max-w-lg mx-auto">
+      <ProcessingStep label="Uploading video"    completed={progress > 10} />
+      <ProcessingStep label="Running YOLO"       completed={progress > 60} />
+      <ProcessingStep label="Exporting results"  completed={progress > 90} />
+    </div>
+  </motion.div>
+);
 
 const ProcessingStep = ({ label, completed }) => (
   <div className="text-center">
