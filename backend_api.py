@@ -47,7 +47,7 @@ app = FastAPI(title="YOLO Video Detection API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://dynamic-maamoul-2d88dc.netlify.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

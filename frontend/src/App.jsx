@@ -137,7 +137,7 @@ function App() {
         config,
         (uploadPercent) => {
           // Show upload progress up to 10%
-          setProcessingProgress(Math.round(uploadPercent * 0.1));
+          setProcessingProgress(uploadPercent); // ✅ FIXED
           setProcessingMessage(`Uploading: ${uploadPercent}%`);
         }
       );

@@ -7,3 +7,4 @@ node_modules/
 *.pt
 *.mp4
 jobs/
+dist/
