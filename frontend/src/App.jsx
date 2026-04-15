@@ -112,9 +112,12 @@ function App() {
         // 'queued' or 'processing' → keep polling normally
       } catch (err) {
         console.error('[Poll] error:', err);
-        clearInterval(pollRef.current);
-        setError('Lost connection to server');
-        setIsProcessing(false);
+        // clearInterval(pollRef.current);
+        // setError('Lost connection to server');
+        // setIsProcessing(false);
+        
+        // ✅ Just log and continue polling
+        setProcessingMessage('Reconnecting to server...');
       }
     }, 2500);
   };
