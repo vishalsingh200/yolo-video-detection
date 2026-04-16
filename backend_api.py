@@ -56,7 +56,8 @@ app.add_middleware(
 JOBS_DIR = Path("jobs")
 JOBS_DIR.mkdir(exist_ok=True)
 
-jobs_db = {}
+# jobs_db = {}
+jobs_db: dict = {}
 
 # ✅ Thread pool: offloads CPU-heavy YOLO processing to a thread
 # so FastAPI's event loop stays free to answer status polling requests
@@ -112,7 +113,8 @@ async def detect_objects(
         job_dir = JOBS_DIR / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
 
-        target_classes = json.loads(classes)
+        # target_classes = json.loads(classes)
+        target_classes = classes.split(",") if classes else []
 
         video_path = job_dir / "input_video.mp4"
         with open(video_path, "wb") as buffer:
@@ -125,6 +127,8 @@ async def detect_objects(
             "progress": 0,
             "message": "Video uploaded, starting processing...",
         }
+        print("AFTER INSERT:", jobs_db)
+        print("INSERTED JOB ID:", job_id)
 
         # ✅ KEY FIX: run_in_executor keeps the event loop unblocked
         # Without this, BackgroundTasks would block ALL status poll responses
@@ -234,6 +238,8 @@ def process_video_background(
 
 @app.get("/api/status/{job_id}")
 async def get_job_status(job_id: str):
+    print("STATUS CHECK JOB ID:", job_id)
+    print("AVAILABLE JOB IDs:", list(jobs_db.keys()))
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail="Job not found")
     job = jobs_db[job_id]
