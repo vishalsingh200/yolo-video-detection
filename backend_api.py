@@ -74,16 +74,33 @@ async def root():
     return {"status": "healthy", "message": "YOLO Video Detection API"}
 
 
+# @app.get("/api/classes")
+# async def get_available_classes():
+#     try:
+#         detector = YOLODetector()
+#         classes = detector.get_available_classes()
+#         return {"classes": classes, "count": len(classes)}
+#     except Exception as e:
+#         logger.error(f"Error getting classes: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 @app.get("/api/classes")
 async def get_available_classes():
-    try:
-        detector = YOLODetector()
-        classes = detector.get_available_classes()
-        return {"classes": classes, "count": len(classes)}
-    except Exception as e:
-        logger.error(f"Error getting classes: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+    return {
+        "classes": [
+            "person","bicycle","car","motorcycle","airplane","bus","train","truck",
+            "boat","traffic light","fire hydrant","stop sign","parking meter","bench",
+            "bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe",
+            "backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard",
+            "sports ball","kite","baseball bat","baseball glove","skateboard","surfboard",
+            "tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl",
+            "banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza",
+            "donut","cake","chair","couch","potted plant","bed","dining table","toilet",
+            "tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven",
+            "toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear",
+            "hair drier","toothbrush"
+        ],
+        "count": 80
+    }
 
 @app.get("/api/models")
 async def get_available_models():
